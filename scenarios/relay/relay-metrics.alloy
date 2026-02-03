@@ -1,0 +1,26 @@
+
+otelcol.receiver.prometheus "remote_receiver" {
+  http {
+    endpoint = "0.0.0.0:19090"  // Listen on all interfaces, port 9201 (adjust as needed)
+  }
+  output {
+    metrics = [
+      prometheus.remote_write.receiver,  // Forward to metric sink
+    ]
+  }
+}
+
+// Sink metrics
+prometheus.remote_write "local" {
+  endpoint {
+    url = sys.env("METRICS_PRIMARY_URL")
+    headers = {
+      "X-Scope-OrgID" = sys.env("METRICS_PRIMARY_ORG"),
+    }
+  }
+  external_labels = {
+    "cluster" = coalesce(sys.env("CLUSTER_NAME"), sys.env("CLUSTER"), ""),
+    "env" = coalesce(sys.env("ENV"), ""),
+    "region" = coalesce(sys.env("REGION"), ""),
+  }
+}

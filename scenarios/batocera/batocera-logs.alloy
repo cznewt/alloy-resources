@@ -1,0 +1,71 @@
+// Batocera default logs pipeline
+
+import.file "batocera_logs" { filename = "/alloy-resources/modules/system/batocera/logs.alloy" }
+import.file "log_levels" { filename = "/alloy-resources/modules/utils/logs/levels.alloy" }
+import.file "log_metrics" { filename = "/alloy-resources/modules/utils/logs/metrics.alloy" }
+import.file "log_labels" { filename = "/alloy-resources/modules/utils/logs/labels.alloy" }
+
+logging {
+  level = "info"
+  write_to = [loki.write.local.receiver]
+}
+
+batocera_logs.source "alloy" {
+  path = "/userdata/system/logs/alloy.log"
+  app = "batocera"
+  component = "alloy"
+  forward_to = [log_levels.default_level.default.receiver]
+}
+
+batocera_logs.source "emulationstation" {
+  path = "/userdata/system/logs/(es_launch_stderr.log|es_launch_stdout.log|configs/emulationstation/es_log.txt)"
+  app = "batocera"
+  component = "emulationstation"
+  forward_to = [log_levels.default_level.default.receiver]
+}
+
+batocera_logs.source "salt" {
+  path = "/userdata/system/logs/salt_minion.log"
+  app = "batocera"
+  component = "salt-minion"
+  forward_to = [log_levels.default_level.default.receiver]
+}
+
+log_levels.default_level "default" {
+  forward_to = [log_levels.normalize_level.default.receiver]
+}
+
+log_levels.normalize_level "default" {
+  forward_to = [
+    log_metrics.pre_process_metrics.default.receiver,
+    log_levels.drop_levels.default.receiver,
+  ]
+}
+
+log_metrics.pre_process_metrics "default" {}
+
+log_levels.drop_levels "default" {
+  forward_to = [log_labels.keep_labels.default.receiver]
+}
+
+log_labels.keep_labels "default" {
+  forward_to = [
+    log_metrics.post_process_metrics.default.receiver,
+    loki.write.local.receiver,
+  ]
+}
+
+log_metrics.post_process_metrics "default" {}
+
+loki.write "local" {
+  endpoint {
+    url = sys.env("LOGS_PRIMARY_URL")
+    tenant_id = sys.env("LOGS_PRIMARY_ORG")
+  }
+
+  external_labels = {
+    "cluster" = coalesce(sys.env("CLUSTER_NAME"), sys.env("CLUSTER"), ""),
+    "env" = coalesce(sys.env("ENV"), ""),
+    "region" = coalesce(sys.env("REGION"), ""),
+  }
+}

@@ -1,0 +1,35 @@
+# Alloy Resources
+
+- **[Modules](docs/modules.md)**: Detailed list of available Alloy component modules.
+- **[Scenarios](docs/scenarios.md)**: Pre-configured scenarios for specific environments.
+
+## Overview
+
+### Primary Scenarios
+
+| Scenario | Description | Key Modules |
+| :--- | :--- | :--- |
+| **[Batocera](scenarios/batocera)** | Retro-gaming console monitoring. | `system/batocera`, `system/linux` |
+| **[Docker](scenarios/docker)** | Docker host monitoring. | `system/docker`, `system/linux` |
+| **[HassOS](scenarios/hassos)** | Home Assistant OS monitoring. | `system/linux`, `utils/logs` |
+| **[Relay](scenarios/relay)** | Telemetry forwarder. | `collector/alloy` |
+
+### Module Categories
+
+| Category | Description | Examples |
+| :--- | :--- | :--- |
+| **[System](docs/modules.md#system)** | OS and Container monitoring. | `linux`, `docker`, `batocera` |
+| **[Kubernetes](docs/modules.md#kubernetes)** | Kubernetes cluster monitoring. | `core`, `kube-state-metrics`, `opencost` |
+| **[Databases](docs/modules.md#databases)** | DB and KV store monitoring. | `postgres`, `redis`, `loki`, `mimir` |
+| **[Cloud](docs/modules.md#cloud)** | Cloud provider integrations. | `aws`, `azure`, `gcp` |
+| **[Networking](docs/modules.md#networking)** | Network monitoring tools. | `blackbox`, `haproxy` |
+| **[Collector](docs/modules.md#collector)** | Telemetry collectors. | `agent`, `alloy`, `statsd` |
+
+
+## Usage
+
+### Test scenarios
+
+```
+just test-(batocera/dockar/hassos)-scenario
+```
