@@ -1,24 +1,17 @@
 services:
   alloy:
     image: grafana/alloy:${ALLOY_VERSION:-v1.11.3}
-    privileged: true
     ports:
       - 12345:12345
       - 4317:4317
       - 4318:4318
+    env_file:
+      - .env
     environment:
       ALLOY_DEPLOY_MODE: docker
     volumes:
       - ./scenarios:${BASE_DIR:-/alloy-resources}/scenarios
       - ./modules:${BASE_DIR:-/alloy-resources}/modules
-      - /proc:/rootproc:ro
-      - /var/run/docker.sock.raw:/var/run/docker.sock
-      - /sys:/sys:ro
-      - /:/rootfs:ro
-      - /dev/disk/:/dev/disk:ro
-      - /var/lib/docker/:/var/lib/docker:ro
     command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /alloy-resources/scenarios/${SCENARIO:-hassos}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    devices:
-      - /dev/kmsg

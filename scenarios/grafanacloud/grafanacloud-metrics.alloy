@@ -1,0 +1,45 @@
+// Grafana Cloud metrics pipeline.
+// Scrapes the node (unix) and process exporters and remote_writes to Grafana
+// Cloud using basic auth. Endpoint and credentials come entirely from the
+// environment (.env) — no secrets live in this file.
+//
+//   METRICS_PRIMARY_URL       Grafana Cloud Prometheus push URL
+//   METRICS_PRIMARY_USER      Grafana Cloud instance id (basic-auth username)
+//   METRICS_PRIMARY_PASSWORD  Grafana Cloud API token   (basic-auth password)
+
+import.file "process_metrics" { filename = "/alloy-resources/modules/system/linux/metrics/process.alloy" }
+import.file "unix_metrics"    { filename = "/alloy-resources/modules/system/linux/metrics/unix.alloy" }
+
+// node_exporter system metrics
+unix_metrics.exporter "targets" {}
+unix_metrics.scrape "metrics" {
+  targets = unix_metrics.exporter.targets.output
+  forward_to = [
+    prometheus.remote_write.cloud.receiver,
+  ]
+}
+
+// process_exporter per-process metrics
+process_metrics.exporter "targets" {}
+process_metrics.scrape "metrics" {
+  targets = process_metrics.exporter.targets.output
+  forward_to = [
+    prometheus.remote_write.cloud.receiver,
+  ]
+}
+
+// Sink: Grafana Cloud (basic auth via env)
+prometheus.remote_write "cloud" {
+  endpoint {
+    url = sys.env("METRICS_PRIMARY_URL")
+    basic_auth {
+      username = sys.env("METRICS_PRIMARY_USER")
+      password = sys.env("METRICS_PRIMARY_PASSWORD")
+    }
+  }
+  external_labels = {
+    "cluster" = coalesce(sys.env("CLUSTER_NAME"), sys.env("CLUSTER"), ""),
+    "env"     = coalesce(sys.env("ENV"), ""),
+    "region"  = coalesce(sys.env("REGION"), ""),
+  }
+}

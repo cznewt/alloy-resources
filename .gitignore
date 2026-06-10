@@ -1,0 +1,8 @@
+# Local environment / secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Alloy local state
+data/
+*.log
