@@ -12,6 +12,7 @@ services:
     volumes:
       - ./scenarios:${BASE_DIR:-/alloy-resources}/scenarios
       - ./modules:${BASE_DIR:-/alloy-resources}/modules
+      - /var/run/docker.sock:/var/run/docker.sock
     command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /alloy-resources/scenarios/${SCENARIO:-hassos}
     extra_hosts:
       - "host.docker.internal:host-gateway"

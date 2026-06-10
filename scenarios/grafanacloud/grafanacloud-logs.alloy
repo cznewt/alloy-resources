@@ -1,24 +1,38 @@
 // Grafana Cloud logs pipeline.
-// Ships Alloy's own component logs to Grafana Cloud Loki using basic auth.
-// Endpoint and credentials come entirely from the environment (.env) — no
-// secrets live in this file.
+// Ships Alloy's own component logs AND Docker container logs to Grafana Cloud
+// Loki using basic auth. Endpoint and credentials come entirely from the
+// environment (.env) — no secrets live in this file.
 //
 //   LOGS_PRIMARY_URL       Grafana Cloud Loki push URL
 //   LOGS_PRIMARY_USER      Grafana Cloud Loki instance id (basic-auth username)
 //   LOGS_PRIMARY_PASSWORD  Grafana Cloud API token        (basic-auth password)
 //
-// Source: Alloy's own logs (via the logging block's write_to) — the source
-// guaranteed to work while the container runs without host mounts. To also
-// collect Docker container logs or the host journal, mount docker.sock / the
-// journal and forward the system/docker + system/linux log modules here.
+// Docker container logs require the host docker socket mounted at
+// /var/run/docker.sock (see docker-compose.yml).
 
+import.file "docker_logs" { filename = "/alloy-resources/modules/system/docker/logs.alloy" }
+
+// --- Alloy's own logs (stamped service_name="alloy") ---
 logging {
   level    = "info"
   format   = "logfmt"
-  write_to = [loki.write.grafanacloud.receiver]
+  write_to = [loki.process.alloy_self.receiver]
 }
 
-// Sink: Grafana Cloud Loki (basic auth via env)
+loki.process "alloy_self" {
+  stage.static_labels {
+    values = { "service_name" = "alloy" }
+  }
+  forward_to = [loki.write.grafanacloud.receiver]
+}
+
+// --- Docker container logs (labelled by container name; service_name
+//     auto-derived from the container label by Grafana Cloud) ---
+docker_logs.source "default" {
+  forward_to = [loki.write.grafanacloud.receiver]
+}
+
+// --- Sink: Grafana Cloud Loki (basic auth via env) ---
 loki.write "grafanacloud" {
   endpoint {
     url = sys.env("LOGS_PRIMARY_URL")
@@ -28,9 +42,8 @@ loki.write "grafanacloud" {
     }
   }
   external_labels = {
-    "service_name" = "alloy",
-    "cluster"      = coalesce(sys.env("CLUSTER_NAME"), sys.env("CLUSTER"), ""),
-    "env"          = coalesce(sys.env("ENV"), ""),
-    "region"       = coalesce(sys.env("REGION"), ""),
+    "cluster" = coalesce(sys.env("CLUSTER_NAME"), sys.env("CLUSTER"), ""),
+    "env"     = coalesce(sys.env("ENV"), ""),
+    "region"  = coalesce(sys.env("REGION"), ""),
   }
 }
