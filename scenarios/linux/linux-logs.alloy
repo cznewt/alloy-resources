@@ -1,0 +1,75 @@
+// Linux host logs pipeline (Alloy running natively on a Linux host).
+// Component modules are fetched over HTTP from the alloy-resources repository
+// (import.http) rather than from a mounted volume. Reads the systemd journal,
+// runs it through the shared log-processing chain (level normalization, metric
+// extraction, label trimming) and writes to Grafana Cloud Loki using basic
+// auth. Credentials come from environment variables — no secrets live here.
+//
+//   LOGS_PRIMARY_URL       Grafana Cloud Loki push URL
+//   LOGS_PRIMARY_USER      Grafana Cloud Loki instance id (basic-auth username)
+//   LOGS_PRIMARY_PASSWORD  Grafana Cloud API token        (basic-auth password)
+
+import.http "journal_logs" {
+  url = "https://raw.githubusercontent.com/cznewt/alloy-resources/main/modules/system/linux/logs/journal.alloy"
+}
+import.http "log_levels" {
+  url = "https://raw.githubusercontent.com/cznewt/alloy-resources/main/modules/utils/logs/levels.alloy"
+}
+import.http "log_metrics" {
+  url = "https://raw.githubusercontent.com/cznewt/alloy-resources/main/modules/utils/logs/metrics.alloy"
+}
+import.http "log_labels" {
+  url = "https://raw.githubusercontent.com/cznewt/alloy-resources/main/modules/utils/logs/labels.alloy"
+}
+
+logging {
+  level = "info"
+  write_to = [loki.write.cloud.receiver]
+}
+
+journal_logs.source "default" {
+  forward_to = [log_levels.default_level.default.receiver]
+}
+
+log_levels.default_level "default" {
+  forward_to = [log_levels.normalize_level.default.receiver]
+}
+
+log_levels.normalize_level "default" {
+  forward_to = [
+    log_metrics.pre_process_metrics.default.receiver,
+    log_levels.drop_levels.default.receiver,
+  ]
+}
+
+log_metrics.pre_process_metrics "default" {}
+
+log_levels.drop_levels "default" {
+  forward_to = [log_labels.keep_labels.default.receiver]
+}
+
+log_labels.keep_labels "default" {
+  forward_to = [
+    log_metrics.post_process_metrics.default.receiver,
+    loki.write.cloud.receiver,
+  ]
+}
+
+log_metrics.post_process_metrics "default" {}
+
+// Sink: Grafana Cloud Loki (basic auth via env)
+loki.write "cloud" {
+  endpoint {
+    url = sys.env("LOGS_PRIMARY_URL")
+    basic_auth {
+      username = sys.env("LOGS_PRIMARY_USER")
+      password = sys.env("LOGS_PRIMARY_PASSWORD")
+    }
+  }
+  external_labels = {
+    "instance" = constants.hostname,
+    "cluster"  = coalesce(sys.env("CLUSTER_NAME"), sys.env("CLUSTER"), ""),
+    "env"      = coalesce(sys.env("ENV"), ""),
+    "region"   = coalesce(sys.env("REGION"), ""),
+  }
+}

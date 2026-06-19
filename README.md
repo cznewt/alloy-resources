@@ -12,6 +12,7 @@
 | **[Batocera](scenarios/batocera)** | Retro-gaming console monitoring. | `system/batocera`, `system/linux` |
 | **[Docker](scenarios/docker)** | Docker host monitoring. | `system/docker`, `system/linux` |
 | **[HassOS](scenarios/hassos)** | Home Assistant OS monitoring. | `system/linux`, `utils/logs` |
+| **[Linux](scenarios/linux)** | Generic Linux host monitoring; modules loaded over HTTP. | `system/linux`, `utils/logs` |
 | **[Relay](scenarios/relay)** | Telemetry forwarder. | `collector/alloy` |
 
 ### Module Categories
