@@ -17,6 +17,9 @@ test-docker-scenario:
 test-hassos-scenario:
     @just test-scenario hassos
 
+test-linux-scenario:
+    @just test-scenario linux
+
 test-relay-scenario:
     @just test-scenario relay
 
@@ -25,4 +28,5 @@ test-all:
     @just test-scenario batocera
     @just test-scenario docker
     @just test-scenario hassos
+    @just test-scenario linux
     @just test-scenario relay

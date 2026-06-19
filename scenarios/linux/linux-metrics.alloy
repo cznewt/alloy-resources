@@ -1,0 +1,52 @@
+// Linux host metrics pipeline (Alloy running natively on a Linux host).
+// Unlike the other scenarios, the component modules are fetched over HTTP from
+// the alloy-resources repository (import.http) rather than from a mounted
+// volume — so a host only needs this single file plus network access to run.
+// Scrapes node_exporter + process_exporter and remote_writes to Grafana Cloud
+// using basic auth. Credentials come from environment variables — no secrets
+// live in this file.
+//
+//   METRICS_PRIMARY_URL       Grafana Cloud Prometheus push URL
+//   METRICS_PRIMARY_USER      Grafana Cloud instance id (basic-auth username)
+//   METRICS_PRIMARY_PASSWORD  Grafana Cloud API token   (basic-auth password)
+
+import.http "process_metrics" {
+  url = "https://raw.githubusercontent.com/cznewt/alloy-resources/main/modules/system/linux/metrics/process.alloy"
+}
+import.http "unix_metrics" {
+  url = "https://raw.githubusercontent.com/cznewt/alloy-resources/main/modules/system/linux/metrics/unix.alloy"
+}
+
+// Collect metrics from process_exporter for node_exporter integration
+process_metrics.exporter "targets" {}
+process_metrics.scrape "metrics" {
+  targets = process_metrics.exporter.targets.output
+  forward_to = [
+    prometheus.remote_write.cloud.receiver,
+  ]
+}
+
+// Collect metrics from unix_exporter for node_exporter integration
+unix_metrics.exporter "targets" {}
+unix_metrics.scrape "metrics" {
+  targets = unix_metrics.exporter.targets.output
+  forward_to = [
+    prometheus.remote_write.cloud.receiver,
+  ]
+}
+
+// Sink: Grafana Cloud (basic auth via env)
+prometheus.remote_write "cloud" {
+  endpoint {
+    url = sys.env("METRICS_PRIMARY_URL")
+    basic_auth {
+      username = sys.env("METRICS_PRIMARY_USER")
+      password = sys.env("METRICS_PRIMARY_PASSWORD")
+    }
+  }
+  external_labels = {
+    "cluster" = coalesce(sys.env("CLUSTER_NAME"), sys.env("CLUSTER"), ""),
+    "env"     = coalesce(sys.env("ENV"), ""),
+    "region"  = coalesce(sys.env("REGION"), ""),
+  }
+}
