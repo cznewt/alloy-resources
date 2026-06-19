@@ -25,6 +25,16 @@ Configuration for monitoring Home Assistant OS.
 - **Metrics**: Collects system metrics.
 - **Logs**: Collects system and application logs.
 
+### [Linux](../scenarios/linux)
+
+Configuration for monitoring a generic Linux host. Unlike the other scenarios,
+the component modules are fetched over HTTP (`import.http`) straight from this
+repository, so a host only needs the scenario file plus network access — no
+mounted `modules/` volume required.
+
+- **Metrics**: Collects system (node_exporter) and process metrics.
+- **Logs**: Collects systemd journal logs.
+
 ### [Relay](../scenarios/relay)
 
 A simple relay configuration for forwarding telemetry.
