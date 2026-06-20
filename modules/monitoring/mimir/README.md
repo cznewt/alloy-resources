@@ -1,6 +1,6 @@
-# pyroscope Module
+# Mimir Module
 
-Handles scraping pyroscope metrics.
+Handles scraping Mimir metrics.
 
 ## Components
 
@@ -10,16 +10,16 @@ Handles scraping pyroscope metrics.
 
 ### `kubernetes`
 
-Handles discovery of kubernetes targets and exports them, this component does not perform any scraping at all and is not required to be used for kubernetes, as a custom service discovery and targets can be defined and passed to `pyroscope.scrape`
+Handles discovery of kubernetes targets and exports them, this component does not perform any scraping at all and is not required to be used for kubernetes, as a custom service discovery and targets can be defined and passed to `mimir.scrape`
 
 #### Arguments
 
-| Name              | Required | Default                                | Description                                                                                                                               |
-| :---------------- | :------- | :------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------- |
-| `namespaces`      | _no_     | `[]`                                   | The namespaces to look for targets in, the default (`[]`) is all namespaces                                                               |
-| `field_selectors` | _no_     | `[]`                                   | The [field selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/) to use to find matching targets |
-| `label_selectors` | _no_     | `["app.kubernetes.io/name=pyroscope"]` | The [label selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/) to use to find matching targets          |
-| `port_name`       | _no_     | `http-metrics`                         | The of the port to scrape metrics from                                                                                                    |
+| Name              | Required | Default                            | Description                                                                                                                               |
+| :---------------- | :------- | :--------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------- |
+| `namespaces`      | _no_     | `[]`                               | The namespaces to look for targets in, the default (`[]`) is all namespaces                                                               |
+| `field_selectors` | _no_     | `[]`                               | The [field selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/) to use to find matching targets |
+| `label_selectors` | _no_     | `["app.kubernetes.io/name=mimir"]` | The [label selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/) to use to find matching targets          |
+| `port_name`       | _no_     | `http-metrics`                     | The of the port to scrape metrics from                                                                                                    |
 
 #### Exports
 
@@ -49,7 +49,7 @@ The following labels are automatically added to exported targets.
 
 | Name   | Optional | Default | Description                            |
 | :----- | :------- | :------ | :------------------------------------- |
-| `port` | `true`   | `4040`  | The of the port to scrape metrics from |
+| `port` | `true`   | `8080`  | The of the port to scrape metrics from |
 
 #### Exports
 
@@ -75,7 +75,7 @@ The following labels are automatically added to exported targets.
 | :---------------- | :------- | :---------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `targets`         | _yes_    | `list(map(string))`           | List of targets to scrape                                                                                                                           |
 | `forward_to`      | _yes_    | `list(MetricsReceiver)`       | Must be a where scraped should be forwarded to                                                                                                      |
-| `job_label`       | _no_     | `integrations/pyroscope`      | The job label to add for all pyroscope metric                                                                                                       |
+| `job_label`       | _no_     | `integrations/mimir`          | The job label to add for all metrics                                                                                                                |
 | `keep_metrics`    | _no_     | [see code](module.river#L228) | A regular expression of metrics to keep                                                                                                             |
 | `drop_metrics`    | _no_     | [see code](module.river#L235) | A regular expression of metrics to drop                                                                                                             |
 | `scrape_interval` | _no_     | `60s`                         | How often to scrape metrics from the targets                                                                                                        |
@@ -97,22 +97,22 @@ The following labels are automatically added to exported targets.
 
 ### `kubernetes`
 
-The following example will scrape all pyroscope instances in cluster.
+The following example will scrape all Mimir instances in cluster.
 
 ```alloy
-import.git "pyroscope" {
+import.git "mimir" {
   repository = "https://github.com/grafana/flow-modules.git"
   revision = "main"
-  path = "modules/databases/timeseries/pyroscope/metrics.alloy"
+  path = "modules/monitoring/mimir/metrics.alloy"
   pull_frequency = "15m"
 }
 
 // get the targets
-pyroscope.kubernetes "targets" {}
+mimir.kubernetes "targets" {}
 
 // scrape the targets
-pyroscope.scrape "metrics" {
-  targets = pyroscope.kubernetes.targets.output
+mimir.scrape "metrics" {
+  targets = mimir.kubernetes.targets.output
   forward_to = [
     prometheus.remote_write.default.receiver,
   ]
@@ -121,7 +121,7 @@ pyroscope.scrape "metrics" {
 // write the metrics
 prometheus.remote_write "local" {
   endpoint {
-    url = "http://pyroscope:9009/api/v1/push"
+    url = "http://mimir:9009/api/v1/push"
 
     basic_auth {
       username = "example-user"
@@ -133,22 +133,22 @@ prometheus.remote_write "local" {
 
 ### `local`
 
-The following example will scrape pyroscope for metrics on the local machine.
+The following example will scrape Mimir for metrics on the local machine.
 
 ```alloy
-import.git "pyroscope" {
+import.git "mimir" {
   repository = "https://github.com/grafana/flow-modules.git"
   revision = "main"
-  path = "modules/databases/timeseries/pyroscope/metrics.alloy"
+  path = "modules/monitoring/mimir/metrics.alloy"
   pull_frequency = "15m"
 }
 
 // get the targets
-pyroscope.local "targets" {}
+mimir.local "targets" {}
 
 // scrape the targets
-pyroscope.scrape "metrics" {
-  targets = pyroscope.local.targets.output
+mimir.scrape "metrics" {
+  targets = mimir.local.targets.output
   forward_to = [
     prometheus.remote_write.default.receiver,
   ]
@@ -157,7 +157,7 @@ pyroscope.scrape "metrics" {
 // write the metrics
 prometheus.remote_write "default" {
   endpoint {
-    url = "http://pyroscope:9009/api/v1/push"
+    url = "http://mimir:9009/api/v1/push"
 
     basic_auth {
       username = "example-user"
