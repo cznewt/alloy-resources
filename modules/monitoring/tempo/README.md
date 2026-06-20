@@ -1,6 +1,6 @@
-# Loki Module
+# Tempo Module
 
-Handles scraping Loki metrics.
+Handles scraping Tempo metrics.
 
 ## Components
 
@@ -10,16 +10,16 @@ Handles scraping Loki metrics.
 
 ### `kubernetes`
 
-Handles discovery of kubernetes targets and exports them, this component does not perform any scraping at all and is not required to be used for kubernetes, as a custom service discovery and targets can be defined and passed to `loki.scrape`
+Handles discovery of kubernetes targets and exports them, this component does not perform any scraping at all and is not required to be used for kubernetes, as a custom service discovery and targets can be defined and passed to `tempo.scrape`
 
 #### Arguments
 
-| Name              | Required | Default                           | Description                                                                                                                               |
-| :---------------- | :------- | :-------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------- |
-| `namespaces`      | _no_     | `[]`                              | The namespaces to look for targets in, the default (`[]`) is all namespaces                                                               |
-| `field_selectors` | _no_     | `[]`                              | The [field selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/) to use to find matching targets |
-| `label_selectors` | _no_     | `["app.kubernetes.io/name=loki"]` | The [label selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/) to use to find matching targets          |
-| `port_name`       | _no_     | `http-metrics`                    | The of the port to scrape metrics from                                                                                                    |
+| Name              | Required | Default                            | Description                                                                                                                               |
+| :---------------- | :------- | :--------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------- |
+| `namespaces`      | _no_     | `[]`                               | The namespaces to look for targets in, the default (`[]`) is all namespaces                                                               |
+| `field_selectors` | _no_     | `[]`                               | The [field selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/) to use to find matching targets |
+| `label_selectors` | _no_     | `["app.kubernetes.io/name=tempo"]` | The [label selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/) to use to find matching targets          |
+| `port_name`       | _no_     | `http-metrics`                     | The of the port to scrape metrics from                                                                                                    |
 
 #### Exports
 
@@ -40,6 +40,7 @@ The following labels are automatically added to exported targets.
 | `pod`       | The full name of the pod                                                                                                                            |
 | `source`    | Constant value of `kubernetes`, denoting where the results came from, this can be useful for LBAC                                                   |
 | `workload`  | Kubernetes workload, a combination of `__meta_kubernetes_pod_controller_kind` and `__meta_kubernetes_pod_controller_name`, i.e. `ReplicaSet/my-app` |
+
 ---
 
 ### `local`
@@ -48,7 +49,7 @@ The following labels are automatically added to exported targets.
 
 | Name   | Optional | Default | Description                            |
 | :----- | :------- | :------ | :------------------------------------- |
-| `port` | `true`   | `3100`  | The of the port to scrape metrics from |
+| `port` | `true`   | `8080`  | The of the port to scrape metrics from |
 
 #### Exports
 
@@ -74,7 +75,7 @@ The following labels are automatically added to exported targets.
 | :---------------- | :------- | :---------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `targets`         | _yes_    | `list(map(string))`           | List of targets to scrape                                                                                                                           |
 | `forward_to`      | _yes_    | `list(MetricsReceiver)`       | Must be a where scraped should be forwarded to                                                                                                      |
-| `job_label`       | _no_     | `integrations/loki`           | The job label to add for all metrics                                                                                                                |
+| `job_label`       | _no_     | `integrations/tempo`          | The job label to add for all metrics                                                                                                                |
 | `keep_metrics`    | _no_     | [see code](module.river#L228) | A regular expression of metrics to keep                                                                                                             |
 | `drop_metrics`    | _no_     | [see code](module.river#L235) | A regular expression of metrics to drop                                                                                                             |
 | `scrape_interval` | _no_     | `60s`                         | How often to scrape metrics from the targets                                                                                                        |
@@ -86,9 +87,9 @@ The following labels are automatically added to exported targets.
 
 The following labels are automatically added to exported targets.
 
-| Label | Description                                                                      |
-| :---- | :------------------------------------------------------------------------------- |
-| `job` | For kubernetes scrapes, this label is set to `{{namespace}}/{{controller_name}}` |
+| Label    | Description                                                                                  |
+| :------- | :------------------------------------------------------------------------------------------- |
+| `source` | Constant value of `local`, denoting where the results came from, this can be useful for LBAC |
 
 ---
 
@@ -96,22 +97,22 @@ The following labels are automatically added to exported targets.
 
 ### `kubernetes`
 
-The following example will scrape all Loki instances in cluster.
+The following example will scrape all Tempo instances in cluster.
 
 ```alloy
-import.git "loki" {
+import.git "tempo" {
   repository = "https://github.com/grafana/flow-modules.git"
   revision = "main"
-  path = "modules/databases/timeseries/loki/metrics.alloy"
+  path = "modules/monitoring/tempo/metrics.alloy"
   pull_frequency = "15m"
 }
 
 // get the targets
-loki.kubernetes "targets" {}
+tempo.kubernetes "targets" {}
 
 // scrape the targets
-loki.scrape "metrics" {
-  targets = loki.kubernetes.targets.output
+tempo.scrape "metrics" {
+  targets = tempo.kubernetes.targets.output
   forward_to = [
     prometheus.remote_write.default.receiver,
   ]
@@ -120,7 +121,7 @@ loki.scrape "metrics" {
 // write the metrics
 prometheus.remote_write "local" {
   endpoint {
-    url = "http://mimir:9009/api/v1/push"
+    url = "http://tempo:9009/api/v1/push"
 
     basic_auth {
       username = "example-user"
@@ -132,22 +133,22 @@ prometheus.remote_write "local" {
 
 ### `local`
 
-The following example will scrape Loki for metrics on the local machine.
+The following example will scrape Tempo for metrics on the local machine.
 
 ```alloy
-import.git "loki" {
+import.git "tempo" {
   repository = "https://github.com/grafana/flow-modules.git"
   revision = "main"
-  path = "modules/databases/timeseries/loki/metrics.alloy"
+  path = "modules/monitoring/tempo/metrics.alloy"
   pull_frequency = "15m"
 }
 
 // get the targets
-loki.local "targets" {}
+tempo.local "targets" {}
 
 // scrape the targets
-loki.scrape "metrics" {
-  targets = loki.local.targets.output
+tempo.scrape "metrics" {
+  targets = tempo.local.targets.output
   forward_to = [
     prometheus.remote_write.default.receiver,
   ]
@@ -156,7 +157,7 @@ loki.scrape "metrics" {
 // write the metrics
 prometheus.remote_write "default" {
   endpoint {
-    url = "http://mimir:9009/api/v1/push"
+    url = "http://tempo:9009/api/v1/push"
 
     basic_auth {
       username = "example-user"

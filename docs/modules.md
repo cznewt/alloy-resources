@@ -26,11 +26,14 @@ This page lists all available Alloy modules.
 - **[MySQL](../modules/databases/sql/mysql)**: Monitoring for MySQL.
 - **[Postgres](../modules/databases/sql/postgres)**: Monitoring for PostgreSQL.
 
-### Time Series & Observability
-- **[Loki](../modules/databases/timeseries/loki)**: Monitoring for Grafana Loki.
-- **[Mimir](../modules/databases/timeseries/mimir)**: Monitoring for Grafana Mimir.
-- **[Pyroscope](../modules/databases/timeseries/pyroscope)**: Monitoring for Grafana Pyroscope.
-- **[Tempo](../modules/databases/timeseries/tempo)**: Monitoring for Grafana Tempo.
+## Monitoring
+
+Time series & observability backends.
+
+- **[Loki](../modules/monitoring/loki)**: Monitoring for Grafana Loki.
+- **[Mimir](../modules/monitoring/mimir)**: Monitoring for Grafana Mimir.
+- **[Pyroscope](../modules/monitoring/pyroscope)**: Monitoring for Grafana Pyroscope.
+- **[Tempo](../modules/monitoring/tempo)**: Monitoring for Grafana Tempo.
 
 ## Cloud
 - **[AWS](../modules/cloud/aws)**: AWS integration.
