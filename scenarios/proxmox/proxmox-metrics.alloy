@@ -1,0 +1,53 @@
+// Proxmox VE host metrics pipeline (Alloy running natively on a PVE node).
+// Two sources: the host OS via the node/unix exporter (with the systemd collector
+// enabled, so PVE service state is visible) and the Proxmox VE API via an external
+// proxmox-exporter. Component modules are fetched over HTTP from the
+// alloy-resources repository. remote_writes to the primary metrics backend using
+// basic auth — credentials come from environment variables, no secrets here.
+//
+//   METRICS_PRIMARY_URL       metrics backend push URL (basic-auth)
+//   METRICS_PRIMARY_USER      basic-auth username
+//   METRICS_PRIMARY_PASSWORD  basic-auth password
+//   PROXMOX_EXPORTER_ADDR     proxmox-exporter host:port (default 127.0.0.1:8080)
+
+import.http "unix_metrics" {
+  url = "https://raw.githubusercontent.com/cznewt/alloy-resources/main/modules/system/linux/metrics/unix.alloy"
+}
+import.http "proxmox_metrics" {
+  url = "https://raw.githubusercontent.com/cznewt/alloy-resources/main/modules/system/proxmox/metrics/exporter.alloy"
+}
+
+// Host OS metrics (node_exporter) — systemd collector on for PVE/qemu service state.
+unix_metrics.exporter "targets" {
+  enable_collectors = ["meminfo", "systemd"]
+}
+unix_metrics.scrape "metrics" {
+  targets = unix_metrics.exporter.targets.output
+  forward_to = [
+    prometheus.remote_write.cloud.receiver,
+  ]
+}
+
+// Proxmox VE API metrics (external proxmox-exporter).
+proxmox_metrics.scrape "metrics" {
+  address = coalesce(sys.env("PROXMOX_EXPORTER_ADDR"), "127.0.0.1:8080")
+  forward_to = [
+    prometheus.remote_write.cloud.receiver,
+  ]
+}
+
+// Sink: primary metrics backend (basic auth via env).
+prometheus.remote_write "cloud" {
+  endpoint {
+    url = sys.env("METRICS_PRIMARY_URL")
+    basic_auth {
+      username = sys.env("METRICS_PRIMARY_USER")
+      password = sys.env("METRICS_PRIMARY_PASSWORD")
+    }
+  }
+  external_labels = {
+    "cluster" = coalesce(sys.env("CLUSTER_NAME"), sys.env("CLUSTER"), ""),
+    "env"     = coalesce(sys.env("ENV"), ""),
+    "region"  = coalesce(sys.env("REGION"), ""),
+  }
+}
