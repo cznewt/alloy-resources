@@ -1,0 +1,46 @@
+/*
+Module: proxmox-exporter
+Description: Scrapes an external proxmox-exporter (starttoaster/proxmox-exporter)
+             for Proxmox VE API metrics (proxmox_*: node / guest / storage /
+             cluster / version). The exporter is a separate process that talks to
+             the PVE API; this module just scrapes its HTTP endpoint.
+
+Note: Every argument except "forward_to" is optional, with defaults applied via
+      coalesce() so a null passed from a consuming module still falls back.
+*/
+declare "scrape" {
+  argument "forward_to" {
+    comment = "List of receivers to forward the scraped metrics to"
+  }
+
+  argument "address" {
+    comment = "host:port of the proxmox-exporter (default: 127.0.0.1:8080)"
+    optional = true
+  }
+
+  argument "job_label" {
+    comment = "job label for the metrics (default: integrations/proxmox)"
+    optional = true
+  }
+
+  argument "scrape_interval" {
+    comment = "scrape interval (default: 30s)"
+    optional = true
+  }
+
+  discovery.relabel "proxmox" {
+    targets = [{
+      "__address__" = coalesce(argument.address.value, "127.0.0.1:8080"),
+    }]
+    rule {
+      target_label = "job"
+      replacement  = coalesce(argument.job_label.value, "integrations/proxmox")
+    }
+  }
+
+  prometheus.scrape "proxmox" {
+    targets         = discovery.relabel.proxmox.output
+    forward_to      = argument.forward_to.value
+    scrape_interval = coalesce(argument.scrape_interval.value, "30s")
+  }
+}
