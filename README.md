@@ -13,6 +13,8 @@
 | **[Docker](scenarios/docker)** | Docker host monitoring. | `system/docker`, `system/linux` |
 | **[HassOS](scenarios/hassos)** | Home Assistant OS monitoring. | `system/linux`, `utils/logs` |
 | **[Linux](scenarios/linux)** | Generic Linux host monitoring; modules loaded over HTTP. | `system/linux`, `utils/logs` |
+| **[Proxmox](scenarios/proxmox)** | Proxmox VE node monitoring (host OS + PVE API + journal). | `system/linux`, `system/proxmox`, `utils/logs` |
+| **[Windows](scenarios/windows)** | Windows host monitoring (windows_exporter metrics + Event Log). | — (inline `windows_exporter`) |
 | **[Relay](scenarios/relay)** | Telemetry forwarder. | `collector/alloy` |
 
 ### Module Categories

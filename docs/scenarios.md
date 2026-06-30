@@ -35,6 +35,24 @@ mounted `modules/` volume required.
 - **Metrics**: Collects system (node_exporter) and process metrics.
 - **Logs**: Collects systemd journal logs.
 
+### [Proxmox](../scenarios/proxmox)
+
+Configuration for monitoring a Proxmox VE node. Alloy runs natively on the
+hypervisor; component modules are fetched over HTTP.
+
+- **Metrics**: host OS (node_exporter, systemd collector enabled) plus Proxmox
+  VE API metrics via an external proxmox-exporter.
+- **Logs**: systemd journal logs (PVE / qemu / kernel services).
+
+### [Windows](../scenarios/windows)
+
+Configuration for monitoring a Windows host. Alloy runs natively as a Windows
+service and scrapes the built-in `windows_exporter` (no external exporter).
+
+- **Metrics**: host metrics via windows_exporter, including the textfile
+  collector (`*.prom` from `TEXTFILE_DIRECTORY`, default `C:\apps\alloy\textfile`).
+- **Logs**: Windows Event Log (Application + System channels).
+
 ### [Relay](../scenarios/relay)
 
 A simple relay configuration for forwarding telemetry.
