@@ -1,0 +1,54 @@
+// Windows host logs pipeline (Alloy running natively on Windows).
+// Reads the Windows Event Log (Application + System channels) and writes to
+// Grafana Cloud Loki using basic auth. Credentials come from environment
+// variables — no secrets live in this file.
+//
+//   LOGS_PRIMARY_URL       Grafana Cloud Loki push URL
+//   LOGS_PRIMARY_USER      Grafana Cloud Loki instance id (basic-auth username)
+//   LOGS_PRIMARY_PASSWORD  Grafana Cloud API token        (basic-auth password)
+
+loki.source.windowsevent "application" {
+  eventlog_name          = "Application"
+  use_incoming_timestamp = true
+  labels = {
+    "service_name" = "windows",
+    "channel"      = "Application",
+  }
+  forward_to = [loki.write.cloud.receiver]
+}
+
+loki.source.windowsevent "system" {
+  eventlog_name          = "System"
+  use_incoming_timestamp = true
+  labels = {
+    "service_name" = "windows",
+    "channel"      = "System",
+  }
+  forward_to = [loki.write.cloud.receiver]
+}
+
+// The Security channel is high-volume and needs elevated privileges. Enable if
+// you need it:
+//
+// loki.source.windowsevent "security" {
+//   eventlog_name = "Security"
+//   labels        = { "service_name" = "windows", "channel" = "Security" }
+//   forward_to    = [loki.write.cloud.receiver]
+// }
+
+// Sink: Grafana Cloud Loki (basic auth via env)
+loki.write "cloud" {
+  endpoint {
+    url = sys.env("LOGS_PRIMARY_URL")
+    basic_auth {
+      username = sys.env("LOGS_PRIMARY_USER")
+      password = sys.env("LOGS_PRIMARY_PASSWORD")
+    }
+  }
+  external_labels = {
+    "instance" = constants.hostname,
+    "cluster"  = coalesce(sys.env("CLUSTER_NAME"), sys.env("CLUSTER"), ""),
+    "env"      = coalesce(sys.env("ENV"), ""),
+    "region"   = coalesce(sys.env("REGION"), ""),
+  }
+}

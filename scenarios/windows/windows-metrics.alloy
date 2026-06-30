@@ -1,0 +1,58 @@
+// Windows host metrics pipeline (Alloy running natively on Windows).
+// Scrapes the built-in windows_exporter and remote_writes to Grafana Cloud
+// using basic auth. Credentials come from environment variables set on the
+// Windows host / Alloy service — no secrets live in this file.
+//
+//   METRICS_PRIMARY_URL       Grafana Cloud Prometheus push URL
+//   METRICS_PRIMARY_USER      Grafana Cloud instance id (basic-auth username)
+//   METRICS_PRIMARY_PASSWORD  Grafana Cloud API token   (basic-auth password)
+
+prometheus.exporter.windows "default" {
+  enabled_collectors = [
+    "cpu", "cs", "logical_disk", "net", "os",
+    "service", "system", "memory", "time", "textfile",
+  ]
+
+  // Ingest *.prom files dropped by host agents (e.g. guardian's usage/inventory
+  // metrics). Override the directory with the TEXTFILE_DIRECTORY env var.
+  // NOTE: each .prom file MUST end with a trailing newline or it is ignored.
+  textfile {
+    directories = [coalesce(sys.env("TEXTFILE_DIRECTORY"), "C:\\apps\\alloy\\textfile")]
+  }
+}
+
+// Tag every series with instance = hostname and a job label.
+discovery.relabel "windows" {
+  targets = prometheus.exporter.windows.default.targets
+
+  rule {
+    target_label = "instance"
+    replacement  = constants.hostname
+  }
+  rule {
+    target_label = "job"
+    replacement  = "integrations/windows_exporter"
+  }
+}
+
+prometheus.scrape "windows" {
+  targets         = discovery.relabel.windows.output
+  forward_to      = [prometheus.remote_write.cloud.receiver]
+  scrape_interval = "60s"
+}
+
+// Sink: Grafana Cloud (basic auth via env)
+prometheus.remote_write "cloud" {
+  endpoint {
+    url = sys.env("METRICS_PRIMARY_URL")
+    basic_auth {
+      username = sys.env("METRICS_PRIMARY_USER")
+      password = sys.env("METRICS_PRIMARY_PASSWORD")
+    }
+  }
+  external_labels = {
+    "cluster" = coalesce(sys.env("CLUSTER_NAME"), sys.env("CLUSTER"), ""),
+    "env"     = coalesce(sys.env("ENV"), ""),
+    "region"  = coalesce(sys.env("REGION"), ""),
+  }
+}
