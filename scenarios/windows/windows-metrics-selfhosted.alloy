@@ -1,0 +1,56 @@
+// Windows host metrics -> self-hosted Mimir (no basic auth; X-Scope-OrgID tenant).
+// Self-hosted variant of windows-metrics.alloy: scrapes the built-in
+// windows_exporter (incl. the textfile collector for guardian's *.prom files)
+// and remote_writes to a self-hosted Mimir, tenant via the X-Scope-OrgID header.
+// No secrets live in this file — everything comes from the environment.
+//
+//   METRICS_PRIMARY_URL  Mimir push URL (e.g. http://mimir.geekedu.eu:9009/api/v1/push)
+//   TENANT               Mimir tenant -> X-Scope-OrgID header (default: gedu)
+//   TEXTFILE_DIRECTORY   *.prom directory (default C:\apps\alloy\textfile)
+//   CLUSTER_NAME, ENV    external labels
+
+prometheus.exporter.windows "default" {
+  enabled_collectors = [
+    "cpu", "cs", "logical_disk", "net", "os",
+    "service", "system", "memory", "time", "textfile",
+  ]
+
+  // Ingest *.prom files dropped by host agents (e.g. guardian's usage/inventory
+  // metrics). Override the directory with the TEXTFILE_DIRECTORY env var.
+  // NOTE: each .prom file MUST end with a trailing newline or it is ignored.
+  textfile {
+    directories = [coalesce(sys.env("TEXTFILE_DIRECTORY"), "C:\\apps\\alloy\\textfile")]
+  }
+}
+
+// Tag every series with instance = hostname and a job label.
+discovery.relabel "windows" {
+  targets = prometheus.exporter.windows.default.targets
+
+  rule {
+    target_label = "instance"
+    replacement  = constants.hostname
+  }
+  rule {
+    target_label = "job"
+    replacement  = "integrations/windows_exporter"
+  }
+}
+
+prometheus.scrape "windows" {
+  targets         = discovery.relabel.windows.output
+  forward_to      = [prometheus.remote_write.gedu.receiver]
+  scrape_interval = "60s"
+}
+
+// Sink: self-hosted Mimir. No basic_auth; tenant via the X-Scope-OrgID header.
+prometheus.remote_write "gedu" {
+  endpoint {
+    url     = sys.env("METRICS_PRIMARY_URL")
+    headers = { "X-Scope-OrgID" = coalesce(sys.env("TENANT"), "gedu") }
+  }
+  external_labels = {
+    "cluster" = coalesce(sys.env("CLUSTER_NAME"), sys.env("CLUSTER"), ""),
+    "env"     = coalesce(sys.env("ENV"), ""),
+  }
+}

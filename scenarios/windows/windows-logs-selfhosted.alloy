@@ -1,0 +1,50 @@
+// Windows host logs -> self-hosted Loki (no basic auth; tenant_id -> X-Scope-OrgID).
+// Self-hosted variant of windows-logs.alloy: reads the Windows Event Log
+// (Application + System channels) and writes to a self-hosted Loki, tenant via
+// tenant_id. No secrets live in this file — everything comes from the env.
+//
+//   LOGS_PRIMARY_URL  Loki push URL (e.g. http://loki.geekedu.eu:3100/loki/api/v1/push)
+//   TENANT            Loki tenant -> X-Scope-OrgID (default: gedu)
+//   CLUSTER_NAME, ENV external labels
+
+loki.source.windowsevent "application" {
+  eventlog_name          = "Application"
+  use_incoming_timestamp = true
+  labels = {
+    "service_name" = "windows",
+    "channel"      = "Application",
+  }
+  forward_to = [loki.write.gedu.receiver]
+}
+
+loki.source.windowsevent "system" {
+  eventlog_name          = "System"
+  use_incoming_timestamp = true
+  labels = {
+    "service_name" = "windows",
+    "channel"      = "System",
+  }
+  forward_to = [loki.write.gedu.receiver]
+}
+
+// The Security channel is high-volume and needs elevated privileges. Enable if
+// you need it:
+//
+// loki.source.windowsevent "security" {
+//   eventlog_name = "Security"
+//   labels        = { "service_name" = "windows", "channel" = "Security" }
+//   forward_to    = [loki.write.gedu.receiver]
+// }
+
+// Sink: self-hosted Loki. No basic_auth; tenant via tenant_id (-> X-Scope-OrgID).
+loki.write "gedu" {
+  endpoint {
+    url       = sys.env("LOGS_PRIMARY_URL")
+    tenant_id = coalesce(sys.env("TENANT"), "gedu")
+  }
+  external_labels = {
+    "instance" = constants.hostname,
+    "cluster"  = coalesce(sys.env("CLUSTER_NAME"), sys.env("CLUSTER"), ""),
+    "env"      = coalesce(sys.env("ENV"), ""),
+  }
+}

@@ -1,0 +1,43 @@
+// Linux host metrics -> self-hosted Mimir (no basic auth; X-Scope-OrgID tenant).
+// Self-hosted variant of linux-metrics.alloy: scrapes the node (unix) + process
+// exporters and remote_writes. Modules are pulled over HTTP from this repo, so
+// this single file + the env is enough.
+//
+//   METRICS_PRIMARY_URL  Mimir push URL (e.g. http://mimir.geekedu.eu:9009/api/v1/push)
+//   TENANT               Mimir tenant -> X-Scope-OrgID header (default: gedu)
+//   CLUSTER_NAME, ENV    external labels
+
+import.http "process_metrics" {
+  url = "https://raw.githubusercontent.com/cznewt/alloy-resources/main/modules/system/linux/metrics/process.alloy"
+}
+import.http "unix_metrics" {
+  url = "https://raw.githubusercontent.com/cznewt/alloy-resources/main/modules/system/linux/metrics/unix.alloy"
+}
+
+process_metrics.exporter "targets" {}
+process_metrics.scrape "metrics" {
+  targets = process_metrics.exporter.targets.output
+  forward_to = [prometheus.remote_write.gedu.receiver]
+}
+
+unix_metrics.exporter "targets" {
+  // Scrape the node-exporter textfile collector so *.prom dropped here (e.g. the
+  // guardian usage/inventory metrics) are remote-written too.
+  textfile_directory = "/var/lib/node_exporter/textfile_collector"
+}
+unix_metrics.scrape "metrics" {
+  targets = unix_metrics.exporter.targets.output
+  forward_to = [prometheus.remote_write.gedu.receiver]
+}
+
+// Sink: self-hosted Mimir. No basic_auth; tenant via X-Scope-OrgID header.
+prometheus.remote_write "gedu" {
+  endpoint {
+    url     = sys.env("METRICS_PRIMARY_URL")
+    headers = { "X-Scope-OrgID" = coalesce(sys.env("TENANT"), "gedu") }
+  }
+  external_labels = {
+    "cluster" = coalesce(sys.env("CLUSTER_NAME"), sys.env("CLUSTER"), ""),
+    "env"     = coalesce(sys.env("ENV"), ""),
+  }
+}

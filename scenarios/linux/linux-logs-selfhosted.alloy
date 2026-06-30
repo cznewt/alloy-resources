@@ -1,0 +1,69 @@
+// Linux host logs -> self-hosted Loki (no basic auth; tenant_id).
+// Self-hosted variant of linux-logs.alloy: reads the systemd journal, runs the
+// shared log-processing chain (level normalization, metric extraction, label
+// trimming) and writes to Loki. Modules are pulled over HTTP from this repo.
+//
+//   LOGS_PRIMARY_URL  Loki push URL (e.g. http://loki.geekedu.eu:3100/loki/api/v1/push)
+//   TENANT            Loki tenant (default: gedu)
+//   CLUSTER_NAME, ENV external labels
+
+import.http "journal_logs" {
+  url = "https://raw.githubusercontent.com/cznewt/alloy-resources/main/modules/system/linux/logs/journal.alloy"
+}
+import.http "log_levels" {
+  url = "https://raw.githubusercontent.com/cznewt/alloy-resources/main/modules/utils/logs/levels.alloy"
+}
+import.http "log_metrics" {
+  url = "https://raw.githubusercontent.com/cznewt/alloy-resources/main/modules/utils/logs/metrics.alloy"
+}
+import.http "log_labels" {
+  url = "https://raw.githubusercontent.com/cznewt/alloy-resources/main/modules/utils/logs/labels.alloy"
+}
+
+logging {
+  level = "info"
+  write_to = [loki.write.gedu.receiver]
+}
+
+journal_logs.source "default" {
+  forward_to = [log_levels.default_level.default.receiver]
+}
+
+log_levels.default_level "default" {
+  forward_to = [log_levels.normalize_level.default.receiver]
+}
+
+log_levels.normalize_level "default" {
+  forward_to = [
+    log_metrics.pre_process_metrics.default.receiver,
+    log_levels.drop_levels.default.receiver,
+  ]
+}
+
+log_metrics.pre_process_metrics "default" {}
+
+log_levels.drop_levels "default" {
+  forward_to = [log_labels.keep_labels.default.receiver]
+}
+
+log_labels.keep_labels "default" {
+  forward_to = [
+    log_metrics.post_process_metrics.default.receiver,
+    loki.write.gedu.receiver,
+  ]
+}
+
+log_metrics.post_process_metrics "default" {}
+
+// Sink: self-hosted Loki. No basic_auth; tenant via tenant_id (-> X-Scope-OrgID).
+loki.write "gedu" {
+  endpoint {
+    url       = sys.env("LOGS_PRIMARY_URL")
+    tenant_id = coalesce(sys.env("TENANT"), "gedu")
+  }
+  external_labels = {
+    "instance" = constants.hostname,
+    "cluster"  = coalesce(sys.env("CLUSTER_NAME"), sys.env("CLUSTER"), ""),
+    "env"      = coalesce(sys.env("ENV"), ""),
+  }
+}

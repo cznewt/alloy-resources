@@ -35,6 +35,13 @@ mounted `modules/` volume required.
 - **Metrics**: Collects system (node_exporter) and process metrics.
 - **Logs**: Collects systemd journal logs.
 
+Same Cloud / self-hosted split as Windows:
+
+- `linux-metrics.alloy` / `linux-logs.alloy` — **Grafana Cloud** (basic auth).
+- `linux-metrics-selfhosted.alloy` / `linux-logs-selfhosted.alloy` — **self-hosted**
+  Mimir/Loki; tenant via `X-Scope-OrgID` / `tenant_id` from the `TENANT` env (default
+  `gedu`). The variant gedu's Linux nodes use (vendored by alcali's `alloy._debian`).
+
 ### [Proxmox](../scenarios/proxmox)
 
 Configuration for monitoring a Proxmox VE node. Alloy runs natively on the
@@ -52,6 +59,16 @@ service and scrapes the built-in `windows_exporter` (no external exporter).
 - **Metrics**: host metrics via windows_exporter, including the textfile
   collector (`*.prom` from `TEXTFILE_DIRECTORY`, default `C:\apps\alloy\textfile`).
 - **Logs**: Windows Event Log (Application + System channels).
+
+Two delivery variants share the same collectors:
+
+- `windows-metrics.alloy` / `windows-logs.alloy` — **Grafana Cloud** (basic auth via
+  `METRICS_PRIMARY_USER` / `METRICS_PRIMARY_PASSWORD`).
+- `windows-metrics-selfhosted.alloy` / `windows-logs-selfhosted.alloy` — **self-hosted**
+  Mimir/Loki; tenant via the `X-Scope-OrgID` header from the `TENANT` env (default
+  `gedu`), no basic auth. This is the variant gedu's Windows nodes use — alcali's
+  `alloy._windows` state vendors it, parameterised from the os-bakery `pillar.alloy`
+  metrics/logs destinations (mirrors the Linux self-hosted split).
 
 ### [Relay](../scenarios/relay)
 
