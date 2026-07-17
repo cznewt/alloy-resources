@@ -13,6 +13,7 @@ prometheus.exporter.windows "default" {
   enabled_collectors = [
     "cpu", "cs", "logical_disk", "net", "os",
     "service", "system", "memory", "time", "textfile",
+    "thermalzone",  // ACPI thermal-zone temps; often empty on laptop/consumer hardware
   ]
 
   // Ingest *.prom files dropped by host agents (e.g. guardian's usage/inventory
