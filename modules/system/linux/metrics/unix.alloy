@@ -102,7 +102,7 @@ declare "exporter" {
   }
 
   export "output" {
-    value = prometheus.exporter.unix.unix_exporter.targets
+    value = discovery.relabel.unix_exporter.output
   }
 }
 

@@ -46,7 +46,7 @@ declare "exporter" {
   }
 
   export "output" {
-    value = prometheus.exporter.blackbox.exporter.targets
+    value = discovery.relabel.exporter.output
   }
 }
 

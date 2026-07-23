@@ -25,7 +25,7 @@ declare "exporter" {
   }
 
   export "output" {
-    value = prometheus.exporter.cadvisor.cadvisor_exporter.targets
+    value = discovery.relabel.cadvisor_exporter.output
   }
 }
 

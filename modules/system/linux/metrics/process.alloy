@@ -56,7 +56,7 @@ declare "exporter" {
   }
 
   export "output" {
-    value = prometheus.exporter.process.process_exporter.targets
+    value = discovery.relabel.process_exporter.output
   }
 }
 
