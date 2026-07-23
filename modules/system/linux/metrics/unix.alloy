@@ -13,7 +13,13 @@ declare "exporter" {
 
   argument "enable_collectors" {
     comment = "Enable unnecessary collectors to reduce overhead"
-    default = ["meminfo"]
+    default = ["meminfo", "systemd"]
+    optional = true
+  }
+
+  argument "systemd_unit_include" {
+    comment = "Regexp of systemd units to report (curated to core services to keep series bounded)"
+    default = "(salt-minion|alloy|sshd?|docker|containerd|crio|kubelet|gdm|gnome-session.*|wg-quick.*|zerotier-one)\\.service"
     optional = true
   }
 
@@ -54,6 +60,10 @@ declare "exporter" {
 
     cpu {
       info = argument.enable_cpu_info.value
+    }
+
+    systemd {
+      unit_include = argument.systemd_unit_include.value
     }
 
     textfile {
