@@ -19,7 +19,7 @@ declare "exporter" {
 
   argument "systemd_unit_include" {
     comment = "Regexp of systemd units to report (curated to core services to keep series bounded)"
-    default = "(salt-minion|alloy|sshd?|docker|containerd|crio|kubelet|gdm|gnome-session.*|wg-quick.*|zerotier-one)\\.service"
+    default = "(salt-minion|alloy|sshd?|docker|containerd|crio|kubelet|gdm|gnome-session.*|wg-quick.*)\\.service"
     optional = true
   }
 
