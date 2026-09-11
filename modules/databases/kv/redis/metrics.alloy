@@ -153,7 +153,7 @@ declare "local" {
   discovery.relabel "local" {
     targets = [
       {
-        "__address__" = "localhost" + string.format("%s", coalesce(argument.port.value, "9150")),
+        "__address__" = "localhost:" + string.format("%v", coalesce(argument.port.value, "9121")),
         "source" = "local",
       },
     ]
