@@ -42,7 +42,7 @@ Time series & observability backends.
 - **[Grafana Cloud](../modules/cloud/grafana)**: Grafana Cloud integration.
 
 ## Networking
-- **[Blackbox](../modules/networking/blackbox)**: Blackbox probing through Alloy's embedded exporter - HTTP, TCP + TLS (certificate expiry; `kube_apiserver` verifies against the in-cluster CA), ICMP. Series name the probed target in `instance`.
+- **[Blackbox](../modules/networking/blackbox)**: Blackbox probing through Alloy's embedded exporter - HTTP (`http_2xx`, `http_reachable`), TCP + TLS (certificate expiry; `kube_apiserver` verifies against the in-cluster CA), ICMP - with Kubernetes discovery blocks `kube_api` (apiservers + kubelets) and `ingresses` (annotation `prometheus.io/probe`). Series name the probed target in `instance`.
 - **[Consul](../modules/networking/consul)**: Consul monitoring.
 - **[HAProxy](../modules/networking/haproxy)**: HAProxy monitoring.
 - **[ZeroTier](../modules/networking/zerotier-one)**: ZeroTier monitoring.

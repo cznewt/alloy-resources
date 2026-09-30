@@ -8,8 +8,16 @@
 //
 //   {"__address__" = "10.50.51.16:6443", "name" = "apiserver-10.50.51.16", "module" = "kube_apiserver"}
 //
+// Target discovery for Kubernetes: `kube_api` (every apiserver + kubelet
+// serving certificate) and `ingresses` (Ingresses annotated
+// prometheus.io/probe="true" - kapitannet sets it on every ingress it renders).
+//
 // Default modules (argument `config`):
 //   http_2xx        HTTP(S) GET that must answer 2xx
+//   http_reachable  HTTP(S) GET that counts as up on 2xx, 3xx, 401 and 403 -
+//                   the service answers, even behind auth or a redirect -
+//                   without following redirects; TLS verified, so an invalid
+//                   or expired certificate fails the probe (the ingress default)
 //   tls             TCP + TLS handshake; the certificate is read but NOT
 //                   verified - self-signed endpoints such as a kubelet (:10250)
 //   kube_apiserver  TCP + TLS verified against the in-cluster service-account
@@ -20,6 +28,213 @@
 //
 // Every probe's series carry job=<job_label> (default integrations/blackbox)
 // and instance=<target name>.
+
+// Kubernetes control plane: every apiserver behind default/kubernetes (module
+// kube_apiserver: TLS verified against the in-cluster service-account CA) and
+// every node's kubelet serving certificate on :10250 (module tls: read, not
+// verified - kubelets are usually self-signed). Needs list/watch on
+// endpointslices and nodes (the k8s-monitoring Alloy service account has it).
+declare "kube_api" {
+  argument "kubelets" {
+    comment = "Probe every node's kubelet too (default: true)"
+    optional = true
+  }
+
+  argument "apiserver_module" {
+    comment = "Module for the apiservers (default: kube_apiserver)"
+    optional = true
+  }
+
+  argument "kubelet_module" {
+    comment = "Module for the kubelets (default: tls)"
+    optional = true
+  }
+
+  discovery.kubernetes "apiservers" {
+    role = "endpointslice"
+
+    namespaces {
+      names = ["default"]
+    }
+  }
+
+  discovery.relabel "apiservers" {
+    targets = discovery.kubernetes.apiservers.targets
+
+    rule {
+      source_labels = ["__meta_kubernetes_endpointslice_label_kubernetes_io_service_name", "__meta_kubernetes_endpointslice_port_name"]
+      regex         = "kubernetes;https"
+      action        = "keep"
+    }
+
+    rule {
+      source_labels = ["__address__"]
+      regex         = "(.+):[0-9]+"
+      replacement   = "apiserver-$1"
+      target_label  = "name"
+    }
+
+    rule {
+      replacement  = coalesce(argument.apiserver_module.value, "kube_apiserver")
+      target_label = "module"
+    }
+  }
+
+  discovery.kubernetes "nodes" {
+    role = "node"
+  }
+
+  discovery.relabel "kubelets" {
+    targets = discovery.kubernetes.nodes.targets
+
+    // kubelets = false drops them all
+    rule {
+      replacement  = string.format("%v", coalesce(argument.kubelets.value, true))
+      target_label = "__tmp_enabled"
+    }
+
+    rule {
+      source_labels = ["__tmp_enabled"]
+      regex         = "true"
+      action        = "keep"
+    }
+
+    rule {
+      source_labels = ["__meta_kubernetes_node_name"]
+      replacement   = "kubelet-$1"
+      target_label  = "name"
+    }
+
+    rule {
+      replacement  = coalesce(argument.kubelet_module.value, "tls")
+      target_label = "module"
+    }
+  }
+
+  export "output" {
+    value = array.concat(discovery.relabel.apiservers.output, discovery.relabel.kubelets.output)
+  }
+}
+
+// Kubernetes Ingresses: one target per host + path, probed at
+// <scheme>://<host><path> (scheme https when the ingress has TLS for the
+// host). Annotations on the Ingress:
+//   prometheus.io/probe: "true"        opt in (kapitannet sets it on every
+//                                      ingress); "false" opts out even with
+//                                      probe_all
+//   prometheus.io/probe-module: <m>    module (default: the `module` argument)
+//   prometheus.io/probe-path: </p>     path to probe instead of the rule's
+// Targets also carry namespace and ingress labels.
+declare "ingresses" {
+  argument "namespaces" {
+    comment = "The namespaces to look for ingresses in (default: [] is all namespaces)"
+    optional = true
+  }
+
+  argument "probe_all" {
+    comment = "Probe every ingress unless annotated prometheus.io/probe=\"false\", not only the opted-in ones (default: false)"
+    optional = true
+  }
+
+  argument "module" {
+    comment = "Module for ingresses without a prometheus.io/probe-module annotation (default: http_reachable)"
+    optional = true
+  }
+
+  argument "hosts_exclude" {
+    comment = "Regular expression of hosts not to probe, e.g. names only a VPN resolves (default: none)"
+    optional = true
+  }
+
+  discovery.kubernetes "ingresses" {
+    role = "ingress"
+
+    namespaces {
+      names = coalesce(argument.namespaces.value, [])
+    }
+  }
+
+  discovery.relabel "ingresses" {
+    targets = discovery.kubernetes.ingresses.targets
+
+    // opted in ("true"), or - with probe_all - not opted out
+    rule {
+      replacement  = string.format("%v", coalesce(argument.probe_all.value, false))
+      target_label = "__tmp_probe_all"
+    }
+
+    rule {
+      source_labels = ["__meta_kubernetes_ingress_annotation_prometheus_io_probe", "__tmp_probe_all"]
+      separator     = ";"
+      regex         = "true;.*|;true"
+      action        = "keep"
+    }
+
+    // a rule without a host cannot be probed by name
+    rule {
+      source_labels = ["__meta_kubernetes_ingress_host"]
+      regex         = ""
+      action        = "drop"
+    }
+
+    rule {
+      source_labels = ["__meta_kubernetes_ingress_host"]
+      regex         = coalesce(argument.hosts_exclude.value, "^$")
+      action        = "drop"
+    }
+
+    // the rule's path, unless prometheus.io/probe-path overrides it
+    rule {
+      source_labels = ["__meta_kubernetes_ingress_path"]
+      target_label  = "__tmp_path"
+    }
+
+    rule {
+      source_labels = ["__meta_kubernetes_ingress_annotation_prometheus_io_probe_path"]
+      regex         = "(.+)"
+      target_label  = "__tmp_path"
+    }
+
+    rule {
+      source_labels = ["__meta_kubernetes_ingress_scheme", "__meta_kubernetes_ingress_host", "__tmp_path"]
+      separator     = ";"
+      regex         = "(.+);(.+);(.*)"
+      replacement   = "$1://$2$3"
+      target_label  = "__address__"
+    }
+
+    rule {
+      source_labels = ["__meta_kubernetes_ingress_host", "__tmp_path"]
+      separator     = ""
+      target_label  = "name"
+    }
+
+    rule {
+      replacement  = coalesce(argument.module.value, "http_reachable")
+      target_label = "module"
+    }
+
+    rule {
+      source_labels = ["__meta_kubernetes_ingress_annotation_prometheus_io_probe_module"]
+      regex         = "(.+)"
+      target_label  = "module"
+    }
+
+    rule {
+      source_labels = ["__meta_kubernetes_namespace"]
+      target_label  = "namespace"
+    }
+
+    rule {
+      source_labels = ["__meta_kubernetes_ingress_name"]
+      target_label  = "ingress"
+    }
+  }
+
+  export "output" {
+    value = discovery.relabel.ingresses.output
+  }
+}
 
 declare "exporter" {
   argument "targets" {
@@ -35,6 +250,13 @@ modules:
     timeout: 5s
     http:
       preferred_ip_protocol: ip4
+  http_reachable:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: ip4
+      no_follow_redirects: true
+      valid_status_codes: [200, 201, 202, 204, 301, 302, 303, 304, 307, 308, 401, 403]
   tls:
     prober: tcp
     timeout: 5s

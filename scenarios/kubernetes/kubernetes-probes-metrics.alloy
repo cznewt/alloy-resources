@@ -1,0 +1,57 @@
+// Kubernetes blackbox probes -> self-hosted Mimir (no basic auth;
+// X-Scope-OrgID tenant). Runs inside the cluster, under a service account that
+// may list endpointslices, nodes and ingresses (the k8s-monitoring
+// alloy-metrics one can):
+//
+//   - the control plane (blackbox.kube_api): every kube-apiserver behind
+//     default/kubernetes, TLS verified against the service-account CA, and
+//     every node's kubelet on :10250 (self-signed: read, not verified)
+//   - the Ingresses (blackbox.ingresses) annotated prometheus.io/probe="true" -
+//     kapitannet sets it on every ingress it renders - at
+//     <scheme>://<host><path>, module http_reachable (up on 2xx/3xx/401/403,
+//     TLS verified); prometheus.io/probe-module / probe-path override per
+//     ingress, "false" opts one out
+//
+// The blackbox module is pulled over HTTP from this repo. Series:
+// probe_success / probe_ssl_earliest_cert_expiry / probe_http_status_code
+// {job="integrations/blackbox", instance="apiserver-<ip>" | "kubelet-<node>" |
+// "<host><path>"}, ingress targets also with namespace and ingress - what the
+// observ-viz blackbox board and alerts (BlackboxProbeFailed,
+// BlackboxSslCertExpiringSoon < 14 d, BlackboxSslCertExpiring < 7 d) read.
+//
+// Inside k8s-monitoring, put everything above the sink into
+// alloy-metrics.extraConfig and forward to that chart's remote_write
+// (prometheus.remote_write.primary_prometheus.receiver in the v3 chart).
+//
+//   METRICS_PRIMARY_URL  Mimir push URL (e.g. http://mimir-monolith.infra-mimir.svc:9009/api/v1/push)
+//   TENANT               Mimir tenant -> X-Scope-OrgID header (default: gedu)
+//   CLUSTER_NAME, ENV    external labels
+
+import.http "blackbox" {
+  url = "https://raw.githubusercontent.com/cznewt/alloy-resources/main/modules/networking/blackbox/metrics.alloy"
+}
+
+blackbox.kube_api "control_plane" {}
+
+blackbox.ingresses "ingresses" {}
+
+blackbox.exporter "kube" {
+  targets = array.concat(blackbox.kube_api.control_plane.output, blackbox.ingresses.ingresses.output)
+}
+
+blackbox.scrape "kube" {
+  targets    = blackbox.exporter.kube.output
+  forward_to = [prometheus.remote_write.gedu.receiver]
+}
+
+// Sink: self-hosted Mimir. No basic_auth; tenant via X-Scope-OrgID header.
+prometheus.remote_write "gedu" {
+  endpoint {
+    url     = sys.env("METRICS_PRIMARY_URL")
+    headers = { "X-Scope-OrgID" = coalesce(sys.env("TENANT"), "gedu") }
+  }
+  external_labels = {
+    "cluster" = coalesce(sys.env("CLUSTER_NAME"), sys.env("CLUSTER"), ""),
+    "env"     = coalesce(sys.env("ENV"), ""),
+  }
+}

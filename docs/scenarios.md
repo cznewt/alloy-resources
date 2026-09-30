@@ -27,24 +27,29 @@ Configuration for monitoring Home Assistant OS.
 
 ### [Kubernetes](../scenarios/kubernetes)
 
-Control-plane certificate expiry for a Kubernetes cluster, through the
-`networking/blackbox` module (pulled over HTTP, like Linux). Runs inside the
-cluster under a service account that may list endpointslices and nodes - e.g.
-the k8s-monitoring `alloy-metrics` instance, whose `extraConfig` can take the
+Blackbox probes of a Kubernetes cluster from inside it, through the
+`networking/blackbox` module's discovery blocks (pulled over HTTP, like Linux).
+Runs under a service account that may list endpointslices, nodes and ingresses -
+e.g. the k8s-monitoring `alloy-metrics` instance, whose `extraConfig` can take the
 blocks above the sink as they are.
 
-- **Metrics**: `probe_success` and `probe_ssl_earliest_cert_expiry` for every
-  kube-apiserver behind `default/kubernetes` (TLS verified against the
-  service-account CA as `kubernetes`, so a wrong or expired certificate fails
-  the probe) and for every node's kubelet on `:10250` (self-signed: read, not
-  verified). Series carry `job="integrations/blackbox"` and
-  `instance="apiserver-<ip>"` / `"kubelet-<node>"`.
-- `kubernetes-certs-metrics.alloy` — self-hosted Mimir (`METRICS_PRIMARY_URL`,
+- **Control plane** (`blackbox.kube_api`): every kube-apiserver behind
+  `default/kubernetes` (TLS verified against the service-account CA as
+  `kubernetes`) and every node's kubelet on `:10250` (self-signed: read, not
+  verified) - `instance="apiserver-<ip>"` / `"kubelet-<node>"`.
+- **Ingresses** (`blackbox.ingresses`): the ones annotated
+  `prometheus.io/probe: "true"` (kapitannet sets it on every ingress), probed at
+  `<scheme>://<host><path>` with module `http_reachable` (up on 2xx/3xx/401/403,
+  TLS verified) - `instance="<host><path>"` plus `namespace` and `ingress` labels.
+  Per ingress: `prometheus.io/probe-module`, `prometheus.io/probe-path`, and
+  `prometheus.io/probe: "false"` to opt out; `probe_all` / `hosts_exclude` on the
+  block.
+- `kubernetes-probes-metrics.alloy` — self-hosted Mimir (`METRICS_PRIMARY_URL`,
   `TENANT`, `CLUSTER_NAME`, `ENV`).
 
 kubeadm serving certificates last one year and nothing renews them on its own;
-the observ-viz `monitoring.blackboxExporter` alerts fire 14 (warning) and 7
-(critical) days before `probe_ssl_earliest_cert_expiry`.
+the observ-viz `monitoring.blackboxExporter` alerts fire on failed probes and 14
+(warning) / 7 (critical) days before `probe_ssl_earliest_cert_expiry`.
 
 ### [Linux](../scenarios/linux)
 
