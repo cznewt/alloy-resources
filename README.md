@@ -12,6 +12,7 @@
 | **[Batocera](scenarios/batocera)** | Retro-gaming console monitoring. | `system/batocera`, `system/linux` |
 | **[Docker](scenarios/docker)** | Docker host monitoring. | `system/docker`, `system/linux` |
 | **[HassOS](scenarios/hassos)** | Home Assistant OS monitoring. | `system/linux`, `utils/logs` |
+| **[Kubernetes](scenarios/kubernetes)** | Control-plane certificate expiry (every kube-apiserver, verified, and kubelet); runs in-cluster, module over HTTP. | `networking/blackbox` |
 | **[Linux](scenarios/linux)** | Generic Linux host monitoring; modules loaded over HTTP. | `system/linux`, `utils/logs` |
 | **[Proxmox](scenarios/proxmox)** | Proxmox VE node monitoring (host OS + PVE API + journal). | `system/linux`, `system/proxmox`, `utils/logs` |
 | **[Windows](scenarios/windows)** | Windows host monitoring (windows_exporter metrics + Event Log). | — (inline `windows_exporter`) |

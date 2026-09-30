@@ -1,0 +1,99 @@
+// Kubernetes control-plane certificates -> self-hosted Mimir (no basic auth;
+// X-Scope-OrgID tenant). Runs inside the cluster, under a service account that
+// may list endpointslices and nodes (the k8s-monitoring alloy-metrics one can):
+//
+//   - every kube-apiserver behind the default/kubernetes service: TLS verified
+//     against the service-account CA (module kube_apiserver)
+//   - every node's kubelet on :10250: self-signed, so the certificate is read
+//     but not verified (module tls)
+//
+// The blackbox module is pulled over HTTP from this repo. Series:
+// probe_ssl_earliest_cert_expiry / probe_success{job="integrations/blackbox",
+// instance="apiserver-<ip>" | "kubelet-<node>"} - what the observ-viz blackbox
+// alerts (BlackboxSslCertExpiringSoon < 14 d, BlackboxSslCertExpiring < 7 d)
+// and board read. kubeadm serving certificates last one year and nothing
+// renews them on its own.
+//
+// Inside k8s-monitoring, put everything above the sink into
+// alloy-metrics.extraConfig and forward to that chart's remote_write
+// (prometheus.remote_write.primary_prometheus.receiver in the v3 chart).
+//
+//   METRICS_PRIMARY_URL  Mimir push URL (e.g. http://mimir-monolith.infra-mimir.svc:9009/api/v1/push)
+//   TENANT               Mimir tenant -> X-Scope-OrgID header (default: gedu)
+//   CLUSTER_NAME, ENV    external labels
+
+import.http "blackbox" {
+  url = "https://raw.githubusercontent.com/cznewt/alloy-resources/main/modules/networking/blackbox/metrics.alloy"
+}
+
+// the apiservers: endpoints of the default/kubernetes service, port https
+discovery.kubernetes "apiservers" {
+  role = "endpointslice"
+
+  namespaces {
+    names = ["default"]
+  }
+}
+
+discovery.relabel "apiservers" {
+  targets = discovery.kubernetes.apiservers.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_endpointslice_label_kubernetes_io_service_name", "__meta_kubernetes_endpointslice_port_name"]
+    regex         = "kubernetes;https"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__address__"]
+    regex         = "(.+):[0-9]+"
+    replacement   = "apiserver-$1"
+    target_label  = "name"
+  }
+
+  rule {
+    replacement  = "kube_apiserver"
+    target_label = "module"
+  }
+}
+
+// the kubelets: every node's InternalIP on the kubelet port (10250)
+discovery.kubernetes "nodes" {
+  role = "node"
+}
+
+discovery.relabel "kubelets" {
+  targets = discovery.kubernetes.nodes.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    replacement   = "kubelet-$1"
+    target_label  = "name"
+  }
+
+  rule {
+    replacement  = "tls"
+    target_label = "module"
+  }
+}
+
+blackbox.exporter "kube_certs" {
+  targets = array.concat(discovery.relabel.apiservers.output, discovery.relabel.kubelets.output)
+}
+
+blackbox.scrape "kube_certs" {
+  targets    = blackbox.exporter.kube_certs.output
+  forward_to = [prometheus.remote_write.gedu.receiver]
+}
+
+// Sink: self-hosted Mimir. No basic_auth; tenant via X-Scope-OrgID header.
+prometheus.remote_write "gedu" {
+  endpoint {
+    url     = sys.env("METRICS_PRIMARY_URL")
+    headers = { "X-Scope-OrgID" = coalesce(sys.env("TENANT"), "gedu") }
+  }
+  external_labels = {
+    "cluster" = coalesce(sys.env("CLUSTER_NAME"), sys.env("CLUSTER"), ""),
+    "env"     = coalesce(sys.env("ENV"), ""),
+  }
+}

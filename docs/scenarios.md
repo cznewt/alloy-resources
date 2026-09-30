@@ -25,6 +25,27 @@ Configuration for monitoring Home Assistant OS.
 - **Metrics**: Collects system metrics.
 - **Logs**: Collects system and application logs.
 
+### [Kubernetes](../scenarios/kubernetes)
+
+Control-plane certificate expiry for a Kubernetes cluster, through the
+`networking/blackbox` module (pulled over HTTP, like Linux). Runs inside the
+cluster under a service account that may list endpointslices and nodes - e.g.
+the k8s-monitoring `alloy-metrics` instance, whose `extraConfig` can take the
+blocks above the sink as they are.
+
+- **Metrics**: `probe_success` and `probe_ssl_earliest_cert_expiry` for every
+  kube-apiserver behind `default/kubernetes` (TLS verified against the
+  service-account CA as `kubernetes`, so a wrong or expired certificate fails
+  the probe) and for every node's kubelet on `:10250` (self-signed: read, not
+  verified). Series carry `job="integrations/blackbox"` and
+  `instance="apiserver-<ip>"` / `"kubelet-<node>"`.
+- `kubernetes-certs-metrics.alloy` — self-hosted Mimir (`METRICS_PRIMARY_URL`,
+  `TENANT`, `CLUSTER_NAME`, `ENV`).
+
+kubeadm serving certificates last one year and nothing renews them on its own;
+the observ-viz `monitoring.blackboxExporter` alerts fire 14 (warning) and 7
+(critical) days before `probe_ssl_earliest_cert_expiry`.
+
 ### [Linux](../scenarios/linux)
 
 Configuration for monitoring a generic Linux host. Unlike the other scenarios,
