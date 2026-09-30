@@ -28,6 +28,7 @@
 | **[Monitoring](docs/modules.md#monitoring)** | Observability backend monitoring. | `loki`, `mimir`, `tempo`, `pyroscope` |
 | **[Cloud](docs/modules.md#cloud)** | Cloud provider integrations. | `aws`, `azure`, `gcp` |
 | **[Networking](docs/modules.md#networking)** | Network monitoring tools. | `blackbox`, `haproxy` |
+| **[Security](docs/modules.md#security)** | Secrets management. | `openbao` |
 | **[Collector](docs/modules.md#collector)** | Telemetry collectors. | `agent`, `alloy`, `statsd` |
 
 

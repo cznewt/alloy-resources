@@ -1,0 +1,246 @@
+/*
+Module: openbao
+Description: Scrapes the telemetry of OpenBao (or HashiCorp Vault - same endpoint, same vault_* names)
+
+The endpoint is /v1/sys/metrics and it answers in Prometheus format only with
+?format=prometheus, which annotation-based autodiscovery cannot pass - hence
+this module. Enable it on the server:
+
+  listener "tcp" { ... telemetry { unauthenticated_metrics_access = true } }
+  telemetry { prometheus_retention_time = "24h"  disable_hostname = true }
+
+A sealed server exports only vault_core_unsealed, the barrier and the Go
+runtime; request / token / lease metrics appear once it is unsealed.
+
+Note: Every argument except for "forward_to" is optional, and does have a defined default value.  However, the values for these
+      arguments are not defined using the default = " ... " argument syntax, but rather using the coalesce(argument.value, " ... ").
+      This is because if the argument passed in from another consuming module is set to null, the default = " ... " syntax will
+      does not override the value passed in, where coalesce() will return the first non-null value.
+*/
+declare "kubernetes" {
+  // arguments for kubernetes discovery
+  argument "namespaces" {
+    comment = "The namespaces to look for targets in (default: [] is all namespaces)"
+    optional = true
+  }
+
+  argument "field_selectors" {
+    // Docs: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+    comment = "The field selectors to use to find matching targets (default: [])"
+    optional = true
+  }
+
+  argument "label_selectors" {
+    // Docs: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+    comment = "The label selectors to use to find matching targets (default: [\"app.kubernetes.io/name=openbao\"])"
+    optional = true
+  }
+
+  argument "port_name" {
+    comment = "The name of the API port to scrape metrics from (default: http)"
+    optional = true
+  }
+
+  // openbao service discovery for all of the pods
+  discovery.kubernetes "openbao" {
+    role = "pod"
+
+    selectors {
+      role = "pod"
+      field = string.join(coalesce(argument.field_selectors.value, []), ",")
+      label = string.join(coalesce(argument.label_selectors.value, ["app.kubernetes.io/name=openbao"]), ",")
+    }
+
+    namespaces {
+      names = coalesce(argument.namespaces.value, [])
+    }
+  }
+
+  // openbao relabelings (pre-scrape)
+  discovery.relabel "kubernetes" {
+    targets = discovery.kubernetes.openbao.targets
+
+    // keep only the API port of Running pods - NOT only ready ones: the chart's
+    // readiness probe fails while the server is sealed, which is exactly when
+    // it must stay monitored
+    rule {
+      source_labels = [
+        "__meta_kubernetes_pod_container_port_name",
+        "__meta_kubernetes_pod_phase",
+      ]
+      separator = "@"
+      regex = coalesce(argument.port_name.value, "http") + "@Running"
+      action = "keep"
+    }
+
+    // drop any init containers
+    rule {
+      source_labels = ["__meta_kubernetes_pod_container_init"]
+      regex = "true"
+      action = "drop"
+    }
+
+    // set the namespace label
+    rule {
+      source_labels = ["__meta_kubernetes_namespace"]
+      target_label  = "namespace"
+    }
+
+    // set the pod label, and use the pod name as the instance
+    rule {
+      source_labels = ["__meta_kubernetes_pod_name"]
+      target_label  = "pod"
+    }
+    rule {
+      source_labels = ["__meta_kubernetes_pod_name"]
+      target_label  = "instance"
+    }
+
+    // set the container label
+    rule {
+      source_labels = ["__meta_kubernetes_pod_container_name"]
+      target_label  = "container"
+    }
+
+    // set a source label
+    rule {
+      action = "replace"
+      replacement = "kubernetes"
+      target_label = "source"
+    }
+  }
+
+  export "output" {
+    value = discovery.relabel.kubernetes.output
+  }
+}
+
+declare "local" {
+  argument "port" {
+    comment = "The port to use (default: 8200)"
+    optional = true
+  }
+
+  // arguments for local (static)
+  discovery.relabel "local" {
+    targets = [
+      {
+        "__address__" = "localhost:" + string.format("%v", coalesce(argument.port.value, "8200")),
+        "source" = "local",
+      },
+    ]
+  }
+
+  export "output" {
+    value = discovery.relabel.local.output
+  }
+}
+
+declare "scrape" {
+  argument "targets" {
+    comment = "Must be a list() of targets"
+  }
+
+  argument "forward_to" {
+    comment = "Must be a list(MetricsReceiver) where collected metrics should be forwarded to"
+  }
+
+  argument "job_label" {
+    comment = "The job label to add for all metrics (default: integrations/openbao)"
+    optional = true
+  }
+
+  argument "cluster" {
+    comment = "Cluster label to set on the targets (default: none). vault_core_unsealed carries the server's own cluster name once unsealed, which would win over a remote_write external label; set here, the platform's name wins and the server's lands in exported_cluster"
+    optional = true
+  }
+
+  argument "scheme" {
+    comment = "http or https (default: http)"
+    optional = true
+  }
+
+  argument "keep_metrics" {
+    comment = "A regular expression of metrics to keep (default: see below)"
+    optional = true
+  }
+
+  argument "drop_metrics" {
+    comment = "A regular expression of metrics to drop (default: see below)"
+    optional = true
+  }
+
+  argument "scrape_interval" {
+    comment = "How often to scrape metrics from the targets (default: 60s)"
+    optional = true
+  }
+
+  argument "scrape_timeout" {
+    comment = "How long before a scrape times out (default: 10s)"
+    optional = true
+  }
+
+  argument "max_cache_size" {
+    comment = "The maximum number of elements to hold in the relabeling cache (default: 100000).  This should be at least 2x-5x your largest scrape target or samples appended rate."
+    optional = true
+  }
+
+  argument "clustering" {
+    // Docs: https://grafana.com/docs/alloy/latest/get-started/clustering/
+    comment = "Whether or not clustering should be enabled (default: false)"
+    optional = true
+  }
+
+  // openbao relabelings (pre-scrape): the job and, when given, the cluster
+  discovery.relabel "openbao" {
+    targets = argument.targets.value
+
+    rule {
+      target_label = "job"
+      replacement  = coalesce(argument.job_label.value, "integrations/openbao")
+    }
+
+    // an empty replacement removes the label - no cluster set on the target
+    rule {
+      target_label = "cluster"
+      replacement  = coalesce(argument.cluster.value, "")
+    }
+  }
+
+  // openbao scrape job
+  prometheus.scrape "openbao" {
+    forward_to = [prometheus.relabel.openbao.receiver]
+    targets = discovery.relabel.openbao.output
+    scheme = coalesce(argument.scheme.value, "http")
+    metrics_path = "/v1/sys/metrics"
+    params = { "format" = ["prometheus"] }
+    scrape_interval = coalesce(argument.scrape_interval.value, "60s")
+    scrape_timeout = coalesce(argument.scrape_timeout.value, "10s")
+
+    clustering {
+      enabled = coalesce(argument.clustering.value, false)
+    }
+  }
+
+  // openbao metric relabelings (post-scrape)
+  prometheus.relabel "openbao" {
+    forward_to = argument.forward_to.value
+    max_cache_size = coalesce(argument.max_cache_size.value, 100000)
+
+    // drop metrics that match the drop_metrics regex
+    rule {
+      source_labels = ["__name__"]
+      // go_* only: process_start_time_seconds is the uptime (vault_runtime_*
+      // already covers the Go runtime)
+      regex = coalesce(argument.drop_metrics.value, "(^go_.+$)")
+      action = "drop"
+    }
+
+    // keep only metrics that match the keep_metrics regex
+    rule {
+      source_labels = ["__name__"]
+      regex = coalesce(argument.keep_metrics.value, "(.+)")
+      action = "keep"
+    }
+  }
+}

@@ -47,6 +47,9 @@ Time series & observability backends.
 - **[HAProxy](../modules/networking/haproxy)**: HAProxy monitoring.
 - **[ZeroTier](../modules/networking/zerotier-one)**: ZeroTier monitoring.
 
+## Security
+- **[OpenBao](../modules/security/openbao)**: OpenBao / HashiCorp Vault telemetry (`/v1/sys/metrics?format=prometheus`, `vault_*`), sealed servers included.
+
 ## Collector
 - **[Agent](../modules/collector/agent)**: Grafana Agent monitoring.
 - **[Alloy](../modules/collector/alloy)**: Grafana Alloy internal monitoring.
